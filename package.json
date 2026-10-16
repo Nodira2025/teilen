@@ -1,0 +1,15 @@
+{
+  "name": "teilen-multicotizador",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Consulta BCRA y comparación orientativa de créditos prendarios",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check server.mjs && node --check public/app.js && node --check lib/hosted-api.mjs && node --check netlify/functions/api.mjs",
+    "build": "npm run check && npm test"
+  }
+}
