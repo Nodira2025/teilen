@@ -6,7 +6,7 @@ Piloto con ejecución **local y configuración para Netlify**, implementado el 1
 
 1. Importar el repositorio `Nodira2025/teilen` y seleccionar la rama `main`.
 2. Netlify lee `netlify.toml`: comando **`npm run build`**, directorio público **`public`**, funciones **`netlify/functions`** y Node.js **22**. Dejar vacío el directorio base.
-3. En las variables de entorno de Netlify, agregar **`TEILEN_ACCESS_PASSWORD`** con una clave aleatoria de **16 a 256 caracteres** y alcance **Functions**, disponible en el contexto que se despliegue. No cargarla en GitHub ni en `netlify.toml`. Volver a desplegar después de cambiarla.
+3. En las variables de entorno de Netlify, agregar **`TEILEN_ACCESS_PASSWORD`** con una clave aleatoria de **16 a 256 caracteres**, disponible en el contexto que se despliegue. Usar alcance **Functions** si el plan permite elegir alcances; en Free usar **All scopes** (incluye Functions). La aplicación solo utiliza esta variable en el servidor y no la inserta en la interfaz ni en los archivos publicados. No cargarla en GitHub ni en `netlify.toml`. Volver a desplegar después de cambiarla.
 4. Al abrir la web, ingresar esa clave en **Acceso de Teilen**. Sin configurar la clave funcionan el ejemplo ficticio y el comparador; las consultas personales quedan bloqueadas.
 5. Verificar `/api/health` (`mode: netlify`, `auth.configured: true`), el inicio/cierre de sesión y el catálogo. La primera consulta personal completa requiere un documento propio o autorizado.
 
@@ -15,6 +15,12 @@ Importar desde GitHub permite desplegar tanto la interfaz como sus funciones; su
 El adaptador usa las mismas validaciones y normalización BCRA del servidor local. En Linux utiliza `fetch` nativo con validación TLS. La sesión se firma en el servidor y se guarda en una cookie HttpOnly, Secure y SameSite Strict, con duración máxima de 8 horas. Cambiar la clave invalida las sesiones existentes; cerrar sesión elimina la cookie de ese navegador. La clave compartida habilita un piloto de equipo: no identifica operadores individuales ni aporta auditoría por usuario. Netlify limita la API a 30 solicitudes por minuto por IP y dominio; su aplicación puede tener una demora breve. La aplicación no registra cuerpos de solicitudes ni guarda informes; los registros de infraestructura dependen de Netlify.
 
 Referencias técnicas: [Netlify Functions](https://docs.netlify.com/build/functions/get-started/), [límites por función](https://docs.netlify.com/manage/security/secure-access-to-sites/rate-limiting/).
+
+### Si el botón de consulta no permite avanzar
+
+Con el acceso configurado, **Ingresar para consultar** lleva al campo de clave sin borrar el documento ingresado. Después de iniciar sesión cambia a **Consultar documento**. Si falta `TEILEN_ACCESS_PASSWORD`, se muestra **Acceso pendiente de habilitación** y una explicación junto al botón. Si falla la conexión al servidor, **Reintentar conexión** vuelve a comprobar el acceso.
+
+Los errores CSP con origen `about:srcdoc` pueden corresponder a la insignia de Netlify, independiente de la consulta. En este proyecto se identificaron los hashes del script y del estilo de `#nl-badge-frame`. Para evitar ese conflicto, desactivar **Project configuration > General > Powered by Netlify badge**, sin agregar `unsafe-inline` a la política de la app. [Documentación de Netlify](https://docs.netlify.com/manage/projects/powered-by-netlify-badge/).
 
 ## Abrir
 

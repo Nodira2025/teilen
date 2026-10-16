@@ -2,7 +2,7 @@ import { bankTargets, normalize, numeric, money, percent, formatCuit, maskedCuit
 
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { report: null, products: null, rows: [], shown: 12, loadingProducts: false, lookupController: null, lookupGeneration: 0, query: null, activeTab: 'lookup' };
+const state = { report: null, products: null, rows: [], shown: 12, loadingProducts: false, lookupController: null, lookupGeneration: 0, query: null, activeTab: 'lookup', access: { required: true, configured: false, authenticated: false, loading: true } };
 const situationLabels = { 1: 'Situación normal', 2: 'Seguimiento especial / riesgo bajo', 3: 'Con problemas / riesgo medio', 4: 'Alto riesgo', 5: 'Irrecuperable', 6: 'Irrecuperable por disposición técnica' };
 const flagLabels = { refinanciaciones: 'Refinanciación', recategorizacionOblig: 'Recategorización obligatoria', situacionJuridica: 'Situación jurídica', irrecDisposicionTecnica: 'Disposición técnica', enRevision: 'Dato en revisión', procesoJud: 'Dato bajo proceso judicial' };
 const dateTime = value => new Date(value).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
@@ -27,17 +27,41 @@ async function api(path, options = {}) {
 }
 
 function updateAccess(auth = { required: false }) {
+  state.access = auth;
+  const locked = Boolean(auth.required && !auth.authenticated);
   $('access-panel').hidden = !auth.required;
   $('access-form').hidden = !auth.configured || auth.authenticated;
   $('access-logout').hidden = !auth.authenticated;
-  $('lookup-submit').disabled = Boolean(auth.required && !auth.authenticated);
-  $('access-title').textContent = auth.authenticated ? 'Sesión iniciada' : 'Ingresá para consultar';
+  $('lookup-submit').disabled = locked && !auth.configured;
+  $('lookup-submit').type = locked ? 'button' : 'submit';
+  $('lookup-submit').firstElementChild.textContent = locked ? auth.configured ? 'Ingresar para consultar' : 'Acceso pendiente de habilitación' : 'Consultar documento';
+  $('lookup-access-note').hidden = !locked;
+  $('lookup-access-note').textContent = auth.configured ? 'Primero iniciá sesión con la clave de Teilen. Los datos que ingresaste se conservan en esta pantalla.' : 'Falta habilitar la clave de acceso en este sitio. Contactá al administrador; el ejemplo y el comparador siguen disponibles.';
+  $('access-title').textContent = auth.authenticated ? 'Sesión iniciada' : auth.configured ? 'Ingresá para consultar' : 'Consultas pendientes de habilitación';
   $('access-status').textContent = !auth.configured ? 'El administrador todavía debe habilitar el acceso. Podés recorrer el ejemplo y el comparador.' : auth.authenticated ? 'Podés realizar consultas propias o autorizadas. La sesión dura hasta 8 horas.' : 'Usá la clave que te proporcionó el administrador.';
 }
 async function loadAccess() {
+  state.access.loading = true; state.access.failed = false;
+  $('lookup-submit').disabled = true;
+  $('lookup-submit').firstElementChild.textContent = 'Comprobando acceso…';
+  $('lookup-access-note').hidden = false;
+  $('lookup-access-note').textContent = 'Estamos comprobando la conexión y el acceso a consultas.';
   try { const health = await api('/api/health'); $('runtime-badge').textContent = health.mode === 'local' ? 'Piloto local' : 'Piloto en línea'; updateAccess(health.auth); }
-  catch (error) { toast(error.message + ' Recargá la página para reintentar.'); }
+  catch (error) {
+    state.access = { required: true, authenticated: false, failed: true };
+    $('lookup-submit').disabled = false; $('lookup-submit').type = 'button';
+    $('lookup-submit').firstElementChild.textContent = 'Reintentar conexión';
+    $('lookup-access-note').textContent = error.message;
+  }
 }
+function focusAccess() {
+  $('access-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (state.access.configured) $('access-password').focus({ preventScroll: true });
+}
+$('lookup-submit').addEventListener('click', () => {
+  if (state.access.failed) { loadAccess(); return; }
+  if (state.access.required && !state.access.authenticated) focusAccess();
+});
 $('access-form').addEventListener('submit', async event => {
   event.preventDefault(); $('access-submit').disabled = true; $('access-error').hidden = true;
   try {
@@ -90,7 +114,9 @@ function clearReport({ reset = true } = {}) {
 }
 $('clear-report').addEventListener('click', () => clearReport());
 $('lookup-form').addEventListener('submit', async event => {
-  event.preventDefault(); clearReport({ reset: false });
+  event.preventDefault();
+  if (state.access.required && !state.access.authenticated) { if (state.access.failed) loadAccess(); else focusAccess(); return; }
+  clearReport({ reset: false });
   const generation = state.lookupGeneration; const controller = new AbortController(); state.lookupController = controller;
   const body = { document: $('document').value, prefix: $('prefix').value, confirmedIdentity: $('confirm-identity').checked, consent: $('consent').checked };
   $('lookup-fields').disabled = true; $('demo-button').disabled = true; $('empty-report').hidden = true; $('lookup-progress').hidden = false; $('clear-report').hidden = false;
@@ -101,6 +127,7 @@ $('lookup-form').addEventListener('submit', async event => {
   } catch (error) {
     if (generation !== state.lookupGeneration || controller.signal.aborted) return;
     if (error.code === 'AUTH_REQUIRED') updateAccess({ required: true, configured: true, authenticated: false });
+    if (error.code === 'ACCESS_NOT_CONFIGURED') updateAccess({ required: true, configured: false, authenticated: false });
     $('form-error').textContent = error.message; $('form-error').hidden = false; $('empty-report').hidden = false;
   } finally {
     if (generation === state.lookupGeneration) { $('lookup-progress').hidden = true; $('lookup-fields').disabled = false; $('demo-button').disabled = false; state.lookupController = null; }
